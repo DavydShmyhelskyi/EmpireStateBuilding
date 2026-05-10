@@ -1,0 +1,102 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #111;
+}
+
+canvas.webgl {
+  display: block;
+  width: 100%; height: 100%;
+  outline: none;
+}
+
+/* ── Watermark ─────────────────────────────────────────────── */
+#watermark {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: none;
+  user-select: none;
+  z-index: 10;
+}
+
+.wm-title {
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 1.05rem;
+  letter-spacing: 0.30em;
+  font-weight: 700;
+  color: #c8a840;
+  text-shadow: 0 1px 8px rgba(200,168,64,0.45);
+}
+
+.wm-sub {
+  font-family: 'Georgia', serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  color: rgba(200,185,140,0.62);
+}
+
+.wm-hint {
+  font-family: monospace;
+  font-size: 0.52rem;
+  letter-spacing: 0.10em;
+  color: rgba(180,170,150,0.38);
+  margin-top: 2px;
+}
+
+/* ── Info panel ────────────────────────────────────────────── */
+#info-panel {
+  position: fixed;
+  bottom: 28px;
+  left: 24px;
+  width: 280px;
+  padding: 14px 18px 16px;
+  background: rgba(10,10,18,0.82);
+  border-left: 3px solid #c8a840;
+  border-radius: 2px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-family: 'Georgia', serif;
+  color: #e8dfc8;
+  z-index: 10;
+  pointer-events: none;
+
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+#info-panel.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+#floor-badge {
+  font-family: monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  color: #c8a840;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+#floor-name {
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f0e8d0;
+  margin-bottom: 6px;
+}
+
+#floor-desc {
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: rgba(220,210,185,0.80);
+}

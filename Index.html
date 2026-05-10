@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Empire State Building — Interactive 3D</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas class="webgl"></canvas>
+
+  <div id="watermark">
+    <span class="wm-title">EMPIRE STATE</span>
+    <span class="wm-sub">350 Fifth Avenue · New York</span>
+    <span class="wm-hint">Hover building · Double-click fullscreen · H = GUI · R = Rain</span>
+  </div>
+
+  <div id="info-panel">
+    <div id="floor-badge">FLOOR 1</div>
+    <h3 id="floor-name">Base Floors</h3>
+    <p id="floor-desc">Office and retail spaces.</p>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
