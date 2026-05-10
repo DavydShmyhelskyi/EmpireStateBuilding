@@ -15,7 +15,7 @@ import GUI from 'lil-gui'
 // ─────────────────────────────────────────────────────────────────────────────
 const L = {
   BLOCK_X: 13, BLOCK_Z: 11,
-  WALK_X: 14,  WALK_Z: 12,
+  WALK_X: 13,  WALK_Z: 11,
   ROAD_E: 24,  ROAD_W: -24, ROAD_N: 22, ROAD_S: -22,
   ROAD_CENTER_E: 19, ROAD_CENTER_W: -19, ROAD_CENTER_N: 17, ROAD_CENTER_S: -17,
   NB_PARK_X: 15.5, SB_PARK_X: 22.5, EB_PARK_Z: 13.5, WB_PARK_Z: 20.5,
@@ -53,7 +53,7 @@ scene.fog = new THREE.FogExp2(0x8898b8, 0.0045)
 // Camera & controls
 // ─────────────────────────────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 800)
-camera.position.set(26, 3.5, 26)
+camera.position.set(0, 1, -26)
 scene.add(camera)
 
 const controls = new OrbitControls(camera, canvas)
@@ -80,14 +80,71 @@ composer.addPass(new OutputPass())
 // ─────────────────────────────────────────────────────────────────────────────
 // HDRI environment (solid fallback already set above)
 // ─────────────────────────────────────────────────────────────────────────────
-new RGBELoader().load(
-  'https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/venice_sunset_1k.hdr',
-  (hdr) => {
-    hdr.mapping = THREE.EquirectangularReflectionMapping
-    scene.background  = hdr
-    scene.environment = hdr
-  }
-)
+// Replace the entire RGBELoader block with this:
+
+scene.background = new THREE.Color(0x0a0020);
+scene.fog = new THREE.FogExp2(0x0f0025, 0.008);
+
+// ── AMBIENT LIGHT ──────────────────────────────────────────────────────────
+const ambL = new THREE.AmbientLight(0x442266, 2.0);
+scene.add(ambL);
+
+// ── STARS ──────────────────────────────────────────────────────────────────
+const starGeo = new THREE.BufferGeometry();
+const starCount = 3000;
+const starPositions = new Float32Array(starCount * 3);
+
+for (let i = 0; i < starCount * 3; i += 3) {
+  const theta = Math.random() * Math.PI * 2;
+  const phi   = Math.acos((Math.random() * 2) - 1);
+  const r     = 150 + Math.random() * 50;
+
+  starPositions[i]     = r * Math.sin(phi) * Math.cos(theta);
+  starPositions[i + 1] = r * Math.sin(phi) * Math.sin(theta);
+  starPositions[i + 2] = r * Math.cos(phi);
+}
+
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+
+const starMat = new THREE.PointsMaterial({
+  color: 0xffeeff,
+  size: 0.5,
+  sizeAttenuation: true,
+  transparent: true,
+  opacity: 1.0,
+});
+
+scene.add(new THREE.Points(starGeo, starMat));
+
+// ── MOON ───────────────────────────────────────────────────────────────────
+const moonGeo = new THREE.SphereGeometry(4, 32, 32);
+const moonMat = new THREE.MeshStandardMaterial({
+  color: 0xe0d0ff,
+  emissive: 0xcc99ff,
+  emissiveIntensity: 1.2,
+  roughness: 0.9,
+  metalness: 0.0,
+});
+
+const moon = new THREE.Mesh(moonGeo, moonMat);
+moon.position.set(-60, 55, -120);
+scene.add(moon);
+
+const moonLight = new THREE.PointLight(0xbb88ff, 2.5, 300);
+moonLight.position.copy(moon.position);
+scene.add(moonLight);
+
+// ── ENVIRONMENT MAP (replaces HDR for PBR reflections) ─────────────────────
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+
+const envScene = new THREE.Scene();
+envScene.background = new THREE.Color(0x120028);
+envScene.add(new THREE.PointLight(0x9955ff, 3, 50)).position.set(0, 10, 0);
+envScene.add(new THREE.PointLight(0x00ffcc, 2, 50)).position.set(10, -5, -10);
+
+scene.environment = pmremGenerator.fromScene(envScene).texture;
+pmremGenerator.dispose();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Materials
@@ -224,7 +281,6 @@ scene.add(streetLampLight)
 
 const beaconLight = new THREE.PointLight('#ff2200', 0, 40)
 scene.add(beaconLight)
-
 const crownLights = [
   new THREE.PointLight('#c8a840', 1.3, 30),
   new THREE.PointLight('#ff8800', 1.3, 30),
@@ -239,17 +295,36 @@ crownLights.forEach((l, i) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Ground & sidewalk
 // ─────────────────────────────────────────────────────────────────────────────
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), asphaltMat)
+
+// Base terrain — noticeably lighter than road so the road square reads clearly
+const outerMat = new THREE.MeshStandardMaterial({ color: '#38302e', roughness: 0.96 })
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), outerMat)
 ground.rotation.x = -Math.PI / 2
 ground.receiveShadow = true
 scene.add(ground)
 
+const ROAD_Y = 0.004   // slightly above base terrain, below markings (0.022)
+;[
+  //  [ planeW, planeD,  cx,   cz ]
+  [ 10,  44,   19,   0 ],   // East avenue  (x=14-24,  z=-22–22)
+  [ 10,  44,  -19,   0 ],   // West avenue  (x=-24–-14)
+  [ 48,  10,    0,  17 ],   // North street (z=12–22,  full x=-24–24)
+  [ 48,  10,    0, -17 ],   // South street (z=-22–-12)
+].forEach(([w, d, cx, cz]) => {
+  const rp = new THREE.Mesh(new THREE.PlaneGeometry(w, d), asphaltMat)
+  rp.rotation.x = -Math.PI / 2
+  rp.position.set(cx, ROAD_Y, cz)
+  rp.receiveShadow = true
+  scene.add(rp)
+})
+
+// Raised sidewalk plaza around the ESB block
 const sidewalk = new THREE.Mesh(new THREE.BoxGeometry(28, 0.10, 24), sidewalkMat)
 sidewalk.position.set(0, 0.05, 0)
 sidewalk.receiveShadow = true
 scene.add(sidewalk)
 
-// Chrome curb caps
+// Chrome curb caps along sidewalk edges
 ;[
   [28, 0.06, 0.10,  0, 0.10,  12],
   [28, 0.06, 0.10,  0, 0.10, -12],
@@ -274,43 +349,82 @@ function addMark(mat, w, d, x, z) {
   scene.add(m)
 }
 
-// Double yellow center lines
-;[L.ROAD_CENTER_N + 0.12, L.ROAD_CENTER_N - 0.12,
-  L.ROAD_CENTER_S + 0.12, L.ROAD_CENTER_S - 0.12].forEach(z => addMark(yellowMat, 48, 0.10, 0, z))
-;[L.ROAD_CENTER_E + 0.12, L.ROAD_CENTER_E - 0.12,
-  L.ROAD_CENTER_W + 0.12, L.ROAD_CENTER_W - 0.12].forEach(x => addMark(yellowMat, 0.10, 44, x, 0))
+// ── Lane geometry constants (derived from L) ─────────────────────────────────
+// East / West avenues  (run N-S, width 10 in X):
+//   parking 2.5 | travel 2.5 | CENTER | travel 2.5 | parking 2.5
+const E_NB_EDGE =  16.5   // NB-parking / NB-travel edge
+const E_CTR     =  19.0   // avenue centre  (= L.ROAD_CENTER_E)
+const E_SB_EDGE =  21.5   // SB-travel / SB-parking edge
+const E_NB_MID  =  17.75  // NB travel lane centre
+const E_SB_MID  =  20.25  // SB travel lane centre
 
-// White dashed lane lines
-for (let z = -18; z <= 18; z += 4) {
-  addMark(markMat, 0.14, 2.2,  17.5, z)
-  addMark(markMat, 0.14, 2.2,  20.5, z)
-  addMark(markMat, 0.14, 2.2, -17.5, z)
-  addMark(markMat, 0.14, 2.2, -20.5, z)
-}
-for (let x = -21; x <= 21; x += 4) {
-  addMark(markMat, 2.2, 0.14, x,  15.5)
-  addMark(markMat, 2.2, 0.14, x, -15.5)
-}
+// North / South streets  (run E-W, width 10 in Z):
+//   parking 2.5 | travel 2.5 | CENTER | travel 2.5 | parking 2.5
+const N_EB_EDGE =  14.5   // EB-parking / EB-travel edge  (z)
+const N_CTR     =  17.0   // street centre  (= L.ROAD_CENTER_N)
+const N_WB_EDGE =  19.5   // WB-travel / WB-parking edge  (z)
+const N_EB_MID  =  15.75  // EB travel lane centre  (z)
+const N_WB_MID  =  18.25  // WB travel lane centre  (z)
 
-// Stop lines
-addMark(markMat, 10, 0.28,  0,  L.WALK_Z + 0.25)
-addMark(markMat, 10, 0.28,  0, -L.WALK_Z - 0.25)
-addMark(markMat, 0.28, 10,  L.WALK_X + 0.25, 0)
-addMark(markMat, 0.28, 10, -L.WALK_X - 0.25, 0)
+const LINEW  = 0.11   // generic line width
+const CL_SEP = 0.13   // half-separation between the two yellow stripes
+// Line lengths clamped to the actual road extents:
+//   Avenues  (N-S, along Z): road goes from z = ROAD_S(-22) to ROAD_N(22)  → 44 units
+//   Streets  (E-W, along X): road goes from x = ROAD_W(-24) to ROAD_E(24)  → 48 units
+const AL = 22   // avenue marking length  (z = -22 to +22)
+const SL = 26   // street marking length  (x = -24 to +24)
 
-// Crosswalks
-function addCrosswalk(cx, cz, horiz) {
-  const count = 6, sw = 0.48, sg = 0.30
-  for (let i = 0; i < count; i++) {
-    const off = (i - count / 2 + 0.5) * (sw + sg)
-    if (horiz) addMark(markMat, sw, 4.5, cx + off, cz)
-    else        addMark(markMat, 4.5, sw, cx, cz + off)
+// ── Double yellow centre lines ───────────────────────────────────────────────
+// Avenues run N-S (along Z) — centre at x = ±E_CTR
+addMark(yellowMat, LINEW, AL,  E_CTR - CL_SEP, 0)
+addMark(yellowMat, LINEW, AL,  E_CTR + CL_SEP, 0)
+addMark(yellowMat, LINEW, AL, -E_CTR - CL_SEP, 0)
+addMark(yellowMat, LINEW, AL, -E_CTR + CL_SEP, 0)
+// Streets run E-W (along X) — centre at z = ±N_CTR
+addMark(yellowMat, SL, LINEW, 0,  N_CTR - CL_SEP)
+addMark(yellowMat, SL, LINEW, 0,  N_CTR + CL_SEP)
+addMark(yellowMat, SL, LINEW, 0, -N_CTR - CL_SEP)
+addMark(yellowMat, SL, LINEW, 0, -N_CTR + CL_SEP)
+
+
+// ── Crosswalks ───────────────────────────────────────────────────────────────
+// Piano-key (ladder) style.
+// crossAvenue=true  → pedestrians cross an N-S avenue; stripes run N-S (in Z),
+//                     offset in X, positioned just past the stop line in Z.
+// crossAvenue=false → pedestrians cross an E-W street; stripes run E-W (in X),
+//                     offset in Z, positioned just past the stop line in X.
+function addCrosswalk(cx, cz, crossAvenue) {
+  const n = 11, sw = 0.44, gap = 0.42
+  const span = n * (sw + gap) - gap          // ≈ 9.5 fits inside 10-unit road
+  for (let i = 0; i < n; i++) {
+    const off = -span / 2 + i * (sw + gap) + sw / 2
+    if (crossAvenue) {
+      // stripe long in Z (parallel to car travel on avenue), offset in X
+      addMark(markMat, sw, 1.4, cx + off, cz)
+    } else {
+      // stripe long in X (parallel to car travel on street), offset in Z
+      addMark(markMat, 1.4, sw, cx, cz + off)
+    }
   }
 }
-addCrosswalk(0,  L.WALK_Z + 2.8, true)
-addCrosswalk(0, -L.WALK_Z - 2.8, true)
-addCrosswalk( L.WALK_X + 2.8, 0, false)
-addCrosswalk(-L.WALK_X - 2.8, 0, false)
+
+// Each crosswalk pair sits just inside the intersection box, after the stop line.
+// Avenue crossings: pedestrians walk E-W across x=14-24 or x=-24 to -14
+// Street crossings: pedestrians walk N-S across z=12-22 or z=-22 to -12
+const CW_INSET = 1.0   // how far inside the intersection the crosswalk centre sits
+
+// NE corner
+addCrosswalk( E_CTR,  L.WALK_Z + CW_INSET, true)   // cross east avenue  (N side of ESB)
+addCrosswalk( L.WALK_X + CW_INSET,  N_CTR, false)  // cross north street (E side)
+// NW corner
+addCrosswalk(-E_CTR,  L.WALK_Z + CW_INSET, true)
+addCrosswalk(-L.WALK_X - CW_INSET,  N_CTR, false)
+// SE corner
+addCrosswalk( E_CTR, -L.WALK_Z - CW_INSET, true)
+addCrosswalk( L.WALK_X + CW_INSET, -N_CTR, false)
+// SW corner
+addCrosswalk(-E_CTR, -L.WALK_Z - CW_INSET, true)
+addCrosswalk(-L.WALK_X - CW_INSET, -N_CTR, false)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empire State Building
@@ -468,34 +582,34 @@ fontLoader.load('/fonts/helvetiker_regular.typeface.json', (font) => {
 // ─────────────────────────────────────────────────────────────────────────────
 const buildingDefs = [
   // NE block
-  { x:  30, z:  30, w:  9, h: 22, d:  9, t: 2 },
-  { x:  38, z:  28, w:  7, h: 35, d:  8, t: 0 },
-  { x:  32, z:  40, w:  8, h: 18, d:  7, t: 1 },
+  { x:  30, z:  30, w:  9, h: 18, d:  9, t: 2 },
+  { x:  38, z:  28, w:  7, h: 15, d:  8, t: 0 },
+  { x:  32, z:  40, w:  8, h: 11, d:  7, t: 1 },
   // NW block
-  { x: -30, z:  30, w: 10, h: 28, d:  9, t: 1 },
-  { x: -38, z:  35, w:  8, h: 20, d:  8, t: 2 },
+  { x: -30, z:  30, w: 10, h: 19, d:  9, t: 1 },
+  { x: -38, z:  35, w:  8, h: 16, d:  8, t: 2 },
   // SE block
-  { x:  30, z: -30, w:  9, h: 32, d:  9, t: 0 },
-  { x:  38, z: -28, w:  7, h: 24, d:  7, t: 2 },
+  { x:  30, z: -30, w:  9, h: 17, d:  9, t: 0 },
+  { x:  38, z: -28, w:  7, h: 14, d:  7, t: 2 },
   // SW block
-  { x: -30, z: -30, w: 10, h: 26, d: 10, t: 1 },
-  { x: -36, z: -36, w:  8, h: 38, d:  8, t: 0 },
+  { x: -30, z: -30, w: 10, h: 12, d: 10, t: 1 },
+  { x: -36, z: -36, w:  8, h: 19, d:  8, t: 0 },
   // Far east high-rises
-  { x:  52, z:   5, w: 14, h: 55, d: 14, t: 2 },
-  { x:  50, z: -12, w: 12, h: 42, d: 12, t: 0 },
+  { x:  52, z:   5, w: 14, h: 13, d: 14, t: 2 },
+  { x:  50, z: -12, w: 12, h: 16, d: 12, t: 0 },
   // Far west
-  { x: -52, z:   5, w: 14, h: 48, d: 14, t: 1 },
-  { x: -50, z: -10, w: 11, h: 36, d: 11, t: 2 },
+  { x: -52, z:   5, w: 14, h: 17, d: 14, t: 1 },
+  { x: -50, z: -10, w: 11, h: 12, d: 11, t: 2 },
   // North mid-block
-  { x:   8, z:  35, w:  9, h: 20, d:  9, t: 0 },
+  { x:   8, z:  35, w:  9, h: 14, d:  9, t: 0 },
   { x: -10, z:  38, w:  8, h: 16, d:  8, t: 3 },
   // South mid-block
-  { x:   8, z: -35, w:  9, h: 24, d:  9, t: 1 },
-  { x: -10, z: -38, w:  8, h: 18, d:  8, t: 0 },
+  { x:   8, z: -35, w:  9, h: 8, d:  9, t: 1 },
+  { x: -10, z: -38, w:  8, h: 10, d:  8, t: 0 },
   // Corner fills
-  { x:  44, z:  44, w: 12, h: 30, d: 12, t: 3 },
-  { x: -44, z:  44, w: 12, h: 25, d: 12, t: 0 },
-  { x:  44, z: -44, w: 12, h: 34, d: 12, t: 2 },
+  { x:  44, z:  44, w: 12, h: 10, d: 12, t: 3 },
+  { x: -44, z:  44, w: 12, h: 15, d: 12, t: 0 },
+  { x:  44, z: -44, w: 12, h: 11, d: 12, t: 2 },
 ]
 
 const texBuilders = [
@@ -634,19 +748,19 @@ function addLamp(x, z, rotY) {
 }
 
 // East curb (arm faces east = -π/2)
-addLamp( L.WALK_X, -8.0, -Math.PI / 2)
-addLamp( L.WALK_X,  0.0, -Math.PI / 2)
-addLamp( L.WALK_X,  8.0, -Math.PI / 2)
+addLamp( L.WALK_X, -8.0, 0 )
+addLamp( L.WALK_X,  0.0, 0 )
+addLamp( L.WALK_X,  8.0, 0 )
 // West curb (arm faces west = +π/2)
-addLamp(-L.WALK_X, -8.0,  Math.PI / 2)
-addLamp(-L.WALK_X,  0.0,  Math.PI / 2)
-addLamp(-L.WALK_X,  8.0,  Math.PI / 2)
+addLamp(-L.WALK_X, -8.0,  Math.PI )
+addLamp(-L.WALK_X,  0.0,  Math.PI )
+addLamp(-L.WALK_X,  8.0,  Math.PI )
 // North curb (arm faces north = 0)
-addLamp(-5.0,  L.WALK_Z,  0)
-addLamp( 5.0,  L.WALK_Z,  0)
+addLamp(-5.0,  L.WALK_Z,  -Math.PI / 2)
+addLamp( 5.0,  L.WALK_Z,  -Math.PI / 2)
 // South curb (arm faces south = π)
-addLamp(-5.0, -L.WALK_Z,  Math.PI)
-addLamp( 5.0, -L.WALK_Z,  Math.PI)
+addLamp(-5.0, -L.WALK_Z,  Math.PI / 2)
+addLamp( 5.0, -L.WALK_Z,  Math.PI / 2)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Trees — organic asymmetric canopy
@@ -681,17 +795,17 @@ function addTree(x, z, h = 4.5) {
 }
 
 // East planting strip
-addTree( L.WALK_X - 0.7, -9.0, 4.5)
-addTree( L.WALK_X - 0.7,  9.0, 4.2)
+addTree( L.WALK_X - 0.7, -4.0, 4.5)
+addTree( L.WALK_X - 0.7,  4.0, 4.2)
 // West planting strip
-addTree(-L.WALK_X + 0.7, -9.0, 4.8)
-addTree(-L.WALK_X + 0.7,  9.0, 4.3)
+addTree(-L.WALK_X + 0.7, -4.0, 4.8)
+addTree(-L.WALK_X + 0.7,  4.0, 4.3)
 // North planting strip
-addTree(-8.0,  L.WALK_Z - 0.7, 4.6)
-addTree( 8.0,  L.WALK_Z - 0.7, 4.4)
+addTree(-9.0,  L.WALK_Z - 0.7, 4.6)
+addTree( 9.0,  L.WALK_Z - 0.7, 4.4)
 // South planting strip
-addTree(-8.0, -L.WALK_Z + 0.7, 4.7)
-addTree( 8.0, -L.WALK_Z + 0.7, 4.5)
+addTree(-9.0, -L.WALK_Z + 0.7, 4.7)
+addTree( 9.0, -L.WALK_Z + 0.7, 4.5)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Parked cars
@@ -722,6 +836,7 @@ function addCar(x, z, rotY, color) {
   ;[[-1.0, 0.26, 0.9],[-1.0, 0.26,-0.9],[1.0, 0.26, 0.9],[1.0, 0.26,-0.9]].forEach(([wx,wy,wz]) => {
     const wh = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.22, 12), wheelMat)
     wh.rotation.z = Math.PI / 2
+    wh.rotation.y = Math.PI / 2
     wh.position.set(wx, wy, wz)
     g.add(wh)
   })
@@ -732,36 +847,25 @@ function addCar(x, z, rotY, color) {
   scene.add(g)
 }
 
-addCar( L.NB_PARK_X, -6,  0,           '#e03030')
-addCar( L.NB_PARK_X,  2,  0,           '#3060c0')
-addCar( L.SB_PARK_X,  4,  Math.PI,     '#d0c020')
-addCar( L.SB_PARK_X, -3,  Math.PI,     '#20c040')
-addCar(-L.NB_PARK_X, -6,  Math.PI,     '#c04020')
-addCar(-L.SB_PARK_X,  3,  0,           '#8040c0')
-addCar( 6,  L.EB_PARK_Z, -Math.PI / 2, '#c0c0c0')
-addCar(-4,  L.WB_PARK_Z,  Math.PI / 2, '#4080c0')
+// Avenue cars (N-S road along Z): rotY = −π/2 → front faces +Z (NB)
+//                                  rotY = +π/2 → front faces −Z (SB)
+// The car body is 3.6 long in local X; after rotation it lies along Z.
+addCar( L.NB_PARK_X, -6,  -Math.PI / 2, '#e03030')  // NB east parking — facing north
+addCar( L.NB_PARK_X,  3,  -Math.PI / 2, '#3060c0')  // NB east parking
+addCar( L.SB_PARK_X,  4,   Math.PI / 2, '#d0c020')  // SB east parking — facing south
+addCar( L.SB_PARK_X, -4,   Math.PI / 2, '#20c040')  // SB east parking
+addCar(-L.NB_PARK_X, -6,  -Math.PI / 2, '#c04020')  // NB west parking — facing north
+addCar(-L.SB_PARK_X,  3,   Math.PI / 2, '#8040c0')  // SB west parking — facing south
+// Street cars (E-W road along X): rotY = 0 → front faces +X (EB)
+//                                  rotY = π → front faces −X (WB)
+addCar( 5,  L.EB_PARK_Z,  0,        '#c0c0c0')  // EB north-street parking — facing east
+addCar(-5,  L.WB_PARK_Z,  Math.PI,  '#4080c0')  // WB north-street parking — facing west
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GLTF Milk Truck
 // ─────────────────────────────────────────────────────────────────────────────
 let truckMixer = null
 const gltfLoader = new GLTFLoader()
-gltfLoader.load(
-  'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/CesiumMilkTruck/glTF-Binary/CesiumMilkTruck.glb',
-  (gltf) => {
-    const truck = gltf.scene
-    truck.scale.setScalar(0.78)
-    truck.position.set(18, 0, 5)
-    truck.castShadow = true
-    scene.add(truck)
-    if (gltf.animations.length) {
-      truckMixer = new THREE.AnimationMixer(truck)
-      truckMixer.clipAction(gltf.animations[0]).play()
-    }
-  },
-  undefined,
-  () => addCar(18, 5, 0, '#f0f0e8')
-)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rain particles
@@ -824,7 +928,7 @@ const dbg = {
   sunShadow: true,
   limestoneColor: '#cec5a8',
   windowGlow: 1.2,
-  rainEnabled: false,
+  rainEnabled: true,
   rainSpeed: 1.0,
   rainSize: 0.12,
   rainOpacity: 0.55,

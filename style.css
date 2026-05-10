@@ -16,7 +16,7 @@ canvas.webgl {
 #watermark {
   position: fixed;
   top: 18px;
-  left: 50%;
+  left: 20%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
@@ -29,7 +29,7 @@ canvas.webgl {
 
 .wm-title {
   font-family: 'Georgia', 'Times New Roman', serif;
-  font-size: 1.05rem;
+  font-size: 1.5rem;
   letter-spacing: 0.30em;
   font-weight: 700;
   color: #c8a840;
@@ -38,16 +38,16 @@ canvas.webgl {
 
 .wm-sub {
   font-family: 'Georgia', serif;
-  font-size: 0.62rem;
+  font-size: 1rem;
   letter-spacing: 0.18em;
-  color: rgba(200,185,140,0.62);
+  color: #fff;
 }
 
 .wm-hint {
   font-family: monospace;
-  font-size: 0.52rem;
+  font-size: 0.8rem;
   letter-spacing: 0.10em;
-  color: rgba(180,170,150,0.38);
+  color: #fff;
   margin-top: 2px;
 }
 
