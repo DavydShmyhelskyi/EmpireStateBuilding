@@ -104,6 +104,7 @@ canvas.webgl {
 
 @media (max-width: 768px) {
   #watermark {
+    display: none;
     left: 50%;
   }
   .wm-title.wm-sub.wm-hint {
