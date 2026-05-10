@@ -100,3 +100,13 @@ canvas.webgl {
   line-height: 1.55;
   color: rgba(220,210,185,0.80);
 }
+
+
+@media (max-width: 768px) {
+  #watermark {
+    left: 50%;
+  }
+  .wm-title.wm-sub.wm-hint {
+  display: none;
+}
+}
