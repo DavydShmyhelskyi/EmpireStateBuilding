@@ -896,61 +896,19 @@ function flightPos(t) {
   )
 }
 
-;(function buildAirplane() {
-  planeGroup = new THREE.Group()
-
-  const bodyMat = new THREE.MeshStandardMaterial({ color: '#b0b8c0', roughness: 0.30, metalness: 0.80 })
-  const wingMat = new THREE.MeshStandardMaterial({ color: '#9aa0a8', roughness: 0.40, metalness: 0.70 })
-
-  // Fuselage — CylinderGeometry runs along Y by default; rotate X +90° so it runs along +Z (nose)
-  const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 8, 10), bodyMat)
-  fuselage.rotation.x = Math.PI / 2
-  planeGroup.add(fuselage)
-
-  // Nose cone — ConeGeometry apex at +Y; rotate X +90° so apex points +Z
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.2, 10), bodyMat)
-  nose.rotation.x = Math.PI / 2
-  nose.position.z = 5.1
-  planeGroup.add(nose)
-
-  // Main wings
-  const wings = new THREE.Mesh(new THREE.BoxGeometry(16, 0.14, 3.2), wingMat)
-  wings.position.z = -0.5
-  planeGroup.add(wings)
-
-  // Engine nacelles under wings
-  ;[-5.0, 5.0].forEach(ex => {
-    const nac = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 2.0, 8), bodyMat)
-    nac.rotation.x = Math.PI / 2
-    nac.position.set(ex, -0.30, 0.0)
-    planeGroup.add(nac)
-  })
-
-  // Vertical tail fin
-  const vFin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.2, 1.8), wingMat)
-  vFin.position.set(0, 1.1, -3.6)
-  planeGroup.add(vFin)
-
-  // Horizontal stabilizers
-  const hStab = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.12, 1.5), wingMat)
-  hStab.position.z = -3.6
-  planeGroup.add(hStab)
-
-  // Navigation lights
-  const mkNavLight = (hex, x, y, z) => {
-    const m = new THREE.Mesh(
-      new THREE.SphereGeometry(0.13, 6, 6),
-      new THREE.MeshStandardMaterial({ emissive: hex, emissiveIntensity: 3.5 })
-    )
-    m.position.set(x, y, z)
-    planeGroup.add(m)
-  }
-  mkNavLight('#ff2200',  8.1, 0.0, -0.5)   // starboard — red
-  mkNavLight('#00cc44', -8.1, 0.0, -0.5)   // port — green
-  mkNavLight('#ffffff',  0.0, 0.0, -4.5)   // tail — white strobe
-
-  scene.add(planeGroup)
-})()
+gltfLoader.load(
+  'https://raw.githubusercontent.com/Ysurac/FlightAirMap-3dmodels/master/a320/glTF2/A320.glb',
+  (gltf) => {
+    planeGroup = new THREE.Group()
+    const model = gltf.scene
+    model.scale.setScalar(0.24)      // A320 ≈ 38 m long; scene unit ≈ 8 m
+    model.rotation.y = -Math.PI / 2 // nose faces +Z (lookAt direction)
+    planeGroup.add(model)
+    scene.add(planeGroup)
+  },
+  undefined,
+  (err) => console.error('Airplane load failed:', err)
+)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Rain particles
