@@ -868,6 +868,91 @@ let truckMixer = null
 const gltfLoader = new GLTFLoader()
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Flying airplane — procedural mesh, figure-8 parametric path
+// ─────────────────────────────────────────────────────────────────────────────
+let planeGroup = null
+const _planeUp    = new THREE.Vector3(0, 1, 0)
+const _planeFwd1  = new THREE.Vector3()
+const _planeFwd2  = new THREE.Vector3()
+const _planeRight = new THREE.Vector3()
+const _planeDelta = new THREE.Vector3()
+
+const FLIGHT = {
+  speed:   0.20,           // rad/s  (~31 s per full loop)
+  a:       62,             // X amplitude of figure-8
+  b:       42,             // Z amplitude  (z = b·sin 2t)
+  alt:     60,             // base altitude — clears ESB spire (~55.4)
+  altVar:  5,              // organic altitude variation
+  altFreq: 2.3,            // variation frequency multiplier
+  maxBank: Math.PI / 3.2,  // max roll ≈ 56°
+  bankMul: 4.2,            // banking sensitivity
+}
+
+function flightPos(t) {
+  return new THREE.Vector3(
+    FLIGHT.a * Math.sin(t),
+    FLIGHT.alt + FLIGHT.altVar * Math.sin(t * FLIGHT.altFreq),
+    FLIGHT.b * Math.sin(2 * t)
+  )
+}
+
+;(function buildAirplane() {
+  planeGroup = new THREE.Group()
+
+  const bodyMat = new THREE.MeshStandardMaterial({ color: '#b0b8c0', roughness: 0.30, metalness: 0.80 })
+  const wingMat = new THREE.MeshStandardMaterial({ color: '#9aa0a8', roughness: 0.40, metalness: 0.70 })
+
+  // Fuselage — CylinderGeometry runs along Y by default; rotate X +90° so it runs along +Z (nose)
+  const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.55, 8, 10), bodyMat)
+  fuselage.rotation.x = Math.PI / 2
+  planeGroup.add(fuselage)
+
+  // Nose cone — ConeGeometry apex at +Y; rotate X +90° so apex points +Z
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.2, 10), bodyMat)
+  nose.rotation.x = Math.PI / 2
+  nose.position.z = 5.1
+  planeGroup.add(nose)
+
+  // Main wings
+  const wings = new THREE.Mesh(new THREE.BoxGeometry(16, 0.14, 3.2), wingMat)
+  wings.position.z = -0.5
+  planeGroup.add(wings)
+
+  // Engine nacelles under wings
+  ;[-5.0, 5.0].forEach(ex => {
+    const nac = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 2.0, 8), bodyMat)
+    nac.rotation.x = Math.PI / 2
+    nac.position.set(ex, -0.30, 0.0)
+    planeGroup.add(nac)
+  })
+
+  // Vertical tail fin
+  const vFin = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.2, 1.8), wingMat)
+  vFin.position.set(0, 1.1, -3.6)
+  planeGroup.add(vFin)
+
+  // Horizontal stabilizers
+  const hStab = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.12, 1.5), wingMat)
+  hStab.position.z = -3.6
+  planeGroup.add(hStab)
+
+  // Navigation lights
+  const mkNavLight = (hex, x, y, z) => {
+    const m = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 6, 6),
+      new THREE.MeshStandardMaterial({ emissive: hex, emissiveIntensity: 3.5 })
+    )
+    m.position.set(x, y, z)
+    planeGroup.add(m)
+  }
+  mkNavLight('#ff2200',  8.1, 0.0, -0.5)   // starboard — red
+  mkNavLight('#00cc44', -8.1, 0.0, -0.5)   // port — green
+  mkNavLight('#ffffff',  0.0, 0.0, -4.5)   // tail — white strobe
+
+  scene.add(planeGroup)
+})()
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Rain particles
 // ─────────────────────────────────────────────────────────────────────────────
 const RAIN_COUNT = 6000
@@ -1043,6 +1128,27 @@ const tick = () => {
       if (pos[i * 3 + 1] < -5) pos[i * 3 + 1] = 72
     }
     rainGeo.attributes.position.needsUpdate = true
+  }
+
+  // Flying plane
+  if (planeGroup) {
+    const t  = elapsed * FLIGHT.speed
+    const DT = 0.04
+    const pP = flightPos(t)
+    const pA = flightPos(t + DT)
+    const pB = flightPos(t + DT * 2)
+
+    planeGroup.position.copy(pP)
+    planeGroup.lookAt(pA)
+
+    // Banking: project heading-change rate onto the local right axis, then roll
+    _planeFwd1.subVectors(pA, pP).normalize()
+    _planeFwd2.subVectors(pB, pA).normalize()
+    _planeRight.crossVectors(_planeUp, _planeFwd1).normalize()
+    _planeDelta.subVectors(_planeFwd2, _planeFwd1)
+    const turn = _planeDelta.dot(_planeRight) / DT
+    const bank = Math.max(-FLIGHT.maxBank, Math.min(FLIGHT.maxBank, -turn * FLIGHT.bankMul))
+    planeGroup.rotateZ(bank)
   }
 
   // Raycaster — floor hover
